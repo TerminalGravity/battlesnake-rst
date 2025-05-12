@@ -1,4 +1,5 @@
 use crate::game_state::{Coord, GameState, Move};
+use super::head_to_head; // Import the head_to_head logic
 
 pub fn get_safe_moves(state: &GameState) -> Vec<Move> {
     let my_head = &state.you.head;
@@ -16,40 +17,54 @@ pub fn get_safe_moves(state: &GameState) -> Vec<Move> {
             continue;
         }
 
-        // 2. Self collision check (avoid all body parts, including future head position)
-        // Careful: Naive check might prevent moving onto tail square even if safe.
-        // For L0, simple avoidance is sufficient.
+        // 2. Self collision check
         if board.is_occupied_by_snake(&target, self_id) {
-             // Allow moving onto tail tip only if length > 1 and it's not head
-             let tail_tip = state.you.body.last().unwrap_or(my_head); // default to head if body is empty somehow
+             let tail_tip = state.you.body.last().unwrap_or(my_head);
              if target == *tail_tip && state.you.length > 1 && target != state.you.head {
-                 // It's the tail tip (and not also the head), potentially safe to move onto
-                 // Advanced logic needed here. For basic safety, still avoid.
-                 // continue;
+                // Allow moving onto tail tip for now (can be refined)
              } else {
                 continue; // Avoid self collision
              }
         }
 
-        // 3. Other snake collision check
-        // Avoid body parts. Head-to-head needs L3 logic.
-        // Exclude tails for now, as they will move.
+        // 3. Other snake body collision check (excluding tails and heads for now)
         if board.is_occupied_by_others(&target, self_id, true) {
-            continue;
+            // Need to refine this: board.is_occupied_by_others excludes tails.
+            // We need to specifically check if the target is another snake's head.
+            let mut occupied_by_other_body_not_head = false;
+            for other_snake in state.board.snakes.iter().filter(|s| s.id != *self_id) {
+                // Check body segments *except* the head (index 0)
+                for segment in other_snake.body.iter().skip(1) {
+                    if *segment == target {
+                        occupied_by_other_body_not_head = true;
+                        break;
+                    }
+                }
+                if occupied_by_other_body_not_head { break; }
+            }
+            if occupied_by_other_body_not_head {
+                 continue; // Avoid non-head body parts
+            }
         }
 
-        // 4. Hazard check (Optional, depending on ruleset - not implemented here)
-        // if board.hazards.contains(&target) {
-        //     continue;
-        // }
+        // 4. Head-to-head collision check (L3)
+        if head_to_head::is_dangerous_head_to_head(state, &target) {
+            continue; // Avoid dangerous head-to-head
+        }
+
+        // 5. Hazard check (Optional)
+        // if board.hazards.contains(&target) { continue; }
 
         safe_moves.push(direction);
     }
 
+    // Optional: If advantageous head-to-head moves exist, prioritize them?
+    // For now, just return all moves deemed safe by the above checks.
+
     safe_moves
 }
 
-// Basic fallback if no safe moves are found (should ideally not happen)
+// Basic fallback if no safe moves are found
 pub fn fallback_safe_move() -> Move {
     Move::Down
 } 

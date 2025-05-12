@@ -5,6 +5,7 @@ use serde::Serialize;
 
 mod game_state;
 mod logic;
+mod sim;
 
 use game_state::{GameState, Move};
 
