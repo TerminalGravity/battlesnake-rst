@@ -1,0 +1,67 @@
+Battlesnake Rust API & Competitive AI – Product Requirements Document
+============================================================
+
+1. Vision
+---------
+Build a production-grade Battlesnake written in Rust that can reliably compete on the global Battlesnake ladder and in seasonal tournaments.  The service must:
+• Expose the official Battlesnake HTTP API endpoints: `/`, `/start`, `/move`, `/end`.
+• Reply within 500 ms for every request, even under tournament load.
+• Evolve from a basic "safe random" snake to a search-based, space-controlling AI.
+• Be easily deployable via Docker to Heroku / Fly.io / Render and Battlesnake's official hosting.
+
+2. Stakeholders & Roles
+-----------------------
+• Engineering Team — implements and maintains the codebase.
+• Data / Analytics — inspects game logs & replays to refine heuristics.
+• DevOps — maintains CI/CD and production deployments.
+• Product Owner — prioritises features to maximise competitive rank.
+
+3. Functional Requirements
+--------------------------
+FR-1  Server Endpoints
+    a. `GET /`    – Return snake metadata (colour, head, tail, version).
+    b. `POST /start` – Receive initial GameState; initialise per-game cache if needed.
+    c. `POST /move`  – Receive current GameState; return next move + optional shout.
+    d. `POST /end`   – Receive final GameState; log outcome and clean up.
+
+FR-2  Game Logic Layers
+    L0. Rule-compliant safe movement (no walls, self, or other bodies).
+    L1. Flood-fill space heuristic to choose the safest move.
+    L2. Health & food management policy (seek food under configurable thresholds).
+    L3. Head-to-head avoidance & length advantage checks.
+    L4. Depth-limited look-ahead search (minimax with alpha-beta) OR MCTS.
+    L5. Ruleset-specific adaptations (Royale shrinking, Wrapped boards, etc.).
+
+FR-3  Configuration
+    • Environment variables for PORT, log level, feature toggles.
+    • Compile-time feature flags (e.g. `search`, `mcts`).
+
+FR-4  Telemetry
+    • Structured logs (JSON or plain) for every turn with timing and chosen move.
+    • Optional Prometheus metrics (latency, search nodes, win rate).
+
+FR-5  Deployment
+    • Dockerfile producing a <15 MB image.
+    • CI pipeline (GitHub Actions) building & running `cargo test` + `cargo clippy`.
+
+4. Non-functional Requirements
+------------------------------
+NFR-1  Performance – Average `/move` response < 200 ms, 99th percentile < 450 ms.
+NFR-2  Stability   – Zero panics in production; graceful fallback to default move.
+NFR-3  Security    – No unsafe code unless justified and reviewed.
+NFR-4  Observability – Logs & metrics sufficient to debug timeouts or crashes.
+NFR-5  Maintainability – Modular codebase with >80 % unit-test coverage in core logic.
+
+5. Success Metrics
+------------------
+• Win-rate ≥ 70 % against official starter snakes on standard 11×11 ladder.
+• Achieve top 25 % placement in at least one seasonal tournament.
+• < 0.1 % timeout rate across 10 000 simulated games.
+
+6. Milestones
+-------------
+M1  Scaffold project (API endpoints, logging, Docker, CI) – 1 week.
+M2  Implement Layers 0-2 + flooding heuristic – 1 week.
+M3  Add head-to-head logic & search prototype – 2 weeks.
+M4  Production deployment & ladder testing – 1 week.
+M5  Tournament hardening & meta-tuning – ongoing. 
