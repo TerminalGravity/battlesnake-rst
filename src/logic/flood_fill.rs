@@ -1,4 +1,5 @@
 use crate::game_state::{Coord, GameState, Move};
+use crate::sim::state::SimState;
 use std::collections::{HashSet, VecDeque};
 
 // Evaluates a list of safe moves based on the amount of space reachable
@@ -23,8 +24,9 @@ pub fn evaluate_moves_by_space(game_state: &GameState, safe_moves: &[Move]) -> V
     move_scores
 }
 
-// Performs a flood fill starting from `start` to count accessible empty squares.
-fn flood_fill(game_state: &GameState, start: &Coord) -> usize {
+// Performs a flood fill starting from `start` to count accessible empty squares in a GameState.
+// Kept for compatibility if needed elsewhere, but evaluation should use flood_fill_sim.
+pub fn flood_fill(game_state: &GameState, start: &Coord) -> usize {
     let board = &game_state.board;
     let mut visited: HashSet<Coord> = HashSet::new();
     let mut queue: VecDeque<Coord> = VecDeque::new();
@@ -68,6 +70,64 @@ fn flood_fill(game_state: &GameState, start: &Coord) -> usize {
             // if board.hazards.contains(&neighbor) {
             //     continue;
             // }
+
+            // Mark as visited and add to queue
+            visited.insert(neighbor);
+            queue.push_back(neighbor);
+        }
+    }
+
+    // Return the number of accessible cells (size of the visited set)
+    visited.len()
+}
+
+// Performs a flood fill starting from `start` to count accessible empty squares in a SimState.
+pub fn flood_fill_sim(sim_state: &SimState, start: &Coord) -> usize {
+    let mut visited: HashSet<Coord> = HashSet::new();
+    let mut queue: VecDeque<Coord> = VecDeque::new();
+
+    // Create a set of occupied points from SimSnakes (excluding tails)
+    let occupied: HashSet<Coord> = sim_state.snakes.iter().flat_map(|snake| {
+        snake.body.iter().skip(1) // Skip head, only block body segments (tail is implicitly not included as we pop it)
+            // Corrected logic: Exclude the *last* element (tail tip), not skip(1)
+            // .enumerate()
+            // .filter(|(i, _)| *i < snake.body.len() - 1) // Old logic, might be wrong for VecDeque
+            // .map(|(_, segment)| *segment)
+
+            // Let's iterate excluding the tail if it exists
+            .take(if snake.body.len() > 1 { snake.body.len() - 1 } else { 0 })
+
+    }).cloned().collect();
+
+
+    // Check if the start node itself is valid
+    if !sim_state.in_bounds(start) || occupied.contains(start) {
+        return 0; // Cannot start fill from an invalid or occupied square
+    }
+
+    queue.push_back(*start);
+    visited.insert(*start);
+
+    while let Some(p) = queue.pop_front() {
+        // Check all four adjacent cells
+        for neighbor in p.neighbours() {
+            // Skip if out of bounds
+            if !sim_state.in_bounds(&neighbor) {
+                continue;
+            }
+
+            // Skip if already visited
+            if visited.contains(&neighbor) {
+                continue;
+            }
+
+            // Skip if occupied by a snake body (excluding tails)
+            if occupied.contains(&neighbor) {
+                continue;
+            }
+
+            // Skip hazards (if added to SimState later)
+            // if sim_state.hazards.contains(&neighbor) { continue; }
 
             // Mark as visited and add to queue
             visited.insert(neighbor);

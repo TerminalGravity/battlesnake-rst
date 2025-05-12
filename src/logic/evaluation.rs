@@ -1,74 +1,62 @@
-use crate::game_state::{GameState};
-use super::flood_fill; // Use existing flood_fill for space evaluation
+use crate::sim::state::{SimState, SimSnake}; // Use SimState
+use super::flood_fill; // Use flood_fill module
 use log::debug;
 
-// Basic heuristic score for a given game state from the perspective of 'you'.
+// Calculate controlled space for a specific snake in a SimState
+fn calculate_controlled_space(state: &SimState, snake: &SimSnake) -> usize {
+    match snake.head() {
+        Some(head) => flood_fill::flood_fill_sim(state, head),
+        None => 0, // No space if snake has no head (is dead)
+    }
+}
+
+// Evaluates a simulated game state from the perspective of the specified snake ID.
 // Higher scores are better.
-// TODO: Refine weights and add more factors (food proximity, opponent threats, etc.)
-pub fn evaluate_state(state: &GameState) -> i32 {
-    let my_id = &state.you.id;
+// TODO: Refine weights, add more factors (food proximity, opponent threats, center control, etc.)
+pub fn evaluate_sim_state(state: &SimState, our_id: &str) -> i32 {
 
-    // Check for immediate death
-    if !state.board.snakes.iter().any(|s| s.id == *my_id) {
-        return i32::MIN; // Lost state
-    }
-
-    // Check for win (only snake left)
-    if state.board.snakes.len() == 1 && state.board.snakes[0].id == *my_id {
-        return i32::MAX; // Won state
-    }
-
-    let health_score = state.you.health as i32;
-    let length_score = state.you.length as i32 * 10; // Length is important
-
-    // Calculate controlled space using flood fill from our head
-    // Use a large max value for fill, assuming we want full area in evaluation
-    let space_score = flood_fill::evaluate_moves_by_space(state, &[/*Need moves here, maybe evaluate space directly?*/])
-        .first()
-        .map_or(0, |(_, score)| *score as i32);
-
-    // Simple aggregation for now
-    let score = health_score + length_score + space_score;
-    debug!(
-        "Game {} Turn {}: Evaluated state score: {} (H: {}, L: {}, S: {})",
-        state.game.id, state.turn, score, health_score, length_score, space_score
-    );
-    score
-}
-
-// Need to rethink how to get space score without moves. Maybe run flood fill directly?
-fn calculate_controlled_space(state: &GameState) -> usize {
-    flood_fill::flood_fill(state, &state.you.head)
-}
-
-// Refined evaluation function incorporating space directly
-pub fn evaluate_state_v2(state: &GameState) -> i32 {
-     let my_id = &state.you.id;
-     let you = match state.board.snakes.iter().find(|s| s.id == *my_id) {
+     let you = match state.snakes.iter().find(|s| s.id == our_id) {
          Some(s) => s,
-         None => return i32::MIN, // We are dead
+         None => return i32::MIN + 1, // We are dead (use MIN + 1 to distinguish from deeper losses)
      };
 
-    if state.board.snakes.len() == 1 {
-        return i32::MAX; // We won
+    // Check for win (only snake left)
+    if state.snakes.len() == 1 {
+        return i32::MAX - 1; // We won (use MAX - 1 to allow depth preference)
     }
 
-    let health_score = you.health as i32;
-    let length_score = you.length as i32 * 10;
-    let space_score = calculate_controlled_space(state) as i32;
+    // --- Component Scores --- 
+    let health_score = you.health as i32; // Weight: 1
+    let length_score = you.length() as i32 * 10; // Weight: 10 (length is crucial)
+    
+    // Space Score - Use flood fill from our head in the SimState
+    let space_score = calculate_controlled_space(state, you) as i32 * 2; // Weight: 2
 
-     // Add differential components?
-    let mut length_advantage = 0;
-    for snake in &state.board.snakes {
-        if snake.id != *my_id {
-            length_advantage += (you.length as i32 - snake.length as i32);
-        }
-    }
+    // Length Advantage Score - Compare our length to the *longest* opponent
+    let max_opponent_length = state.snakes.iter()
+        .filter(|s| s.id != our_id)
+        .map(|s| s.length())
+        .max()
+        .unwrap_or(0); // If no opponents, advantage is based on 0 length
+    
+    let length_advantage = (you.length() as i32 - max_opponent_length as i32) * 5; // Weight: 5
 
-    let score = health_score + length_score + space_score + length_advantage;
+    // --- Aggregation --- 
+    let score = health_score 
+                + length_score 
+                + space_score 
+                + length_advantage;
+    
      debug!(
-        "Game {} Turn {}: Evaluated state score v2: {} (H: {}, L: {}, S: {}, LA: {})",
-        state.game.id, state.turn, score, health_score, length_score, space_score, length_advantage
+        "Game Turn {}: Eval for {}: Score={}, (H={}, L={}, S={}, LA={})",
+        state.turn, our_id, score, health_score, length_score, space_score, length_advantage
     );
+    
     score
-} 
+}
+
+// Remove old GameState-based evaluation functions
+/*
+pub fn evaluate_state(state: &GameState) -> i32 { ... }
+pub fn evaluate_state_v2(state: &GameState) -> i32 { ... }
+*/ 
