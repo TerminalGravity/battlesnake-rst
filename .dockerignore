@@ -1,0 +1,9 @@
+target/
+.git/
+.github/
+.gitignore
+README.md
+.env
+scripts/
+.cursor/
+mcp.json 
